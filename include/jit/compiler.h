@@ -127,6 +127,7 @@ extern bool opt_trace_bytecode;
 extern bool opt_trace_compile;
 
 extern bool opt_ssa_enable;
+
 extern bool running_on_valgrind;
 
 bool method_matches_regex(struct vm_method *vmm);

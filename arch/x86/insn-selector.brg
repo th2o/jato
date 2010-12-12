@@ -15,6 +15,7 @@
 #include <jit/expression.h>
 #include <jit/statement.h>
 #include <jit/bc-offset-mapping.h>
+#include <jit/inline-cache.h>
 #include <jit/exception.h>
 
 #include <arch/instruction.h>
@@ -3750,34 +3751,43 @@ static void invoke(struct basic_block *s, struct tree_node *tree)
 
 static void invokevirtual(struct _MBState *state, struct basic_block *s, struct tree_node *tree)
 {
-	struct statement *stmt;
 	struct var_info *call_target;
 	unsigned long method_offset;
 	struct vm_method *method;
+	struct statement *stmt;
 	struct insn *call_insn;
+	struct var_info *ax;
 	int nr_stack_args;
+
+	ax	= get_fixed_var(s->b_parent, MACH_REG_xAX);
 
 	stmt	= to_stmt(tree);
 	method_offset = stmt_method_index(stmt) * sizeof(void *);
 
 	method	= stmt->target_method;
 
-	/* object reference */
-	call_target = state->left->reg1;
+	if (inline_cache_supports_method(method)) {
+		select_safepoint_insn(s, tree, imm_reg_insn(INSN_MOV_IMM_REG, stmt_method_index(stmt), ax));
+		select_insn(s, tree, rel_insn(INSN_CALL_REL, (unsigned long) inline_cache_stub));
+	} else {
+		/* object reference */
+		call_target = state->left->reg1;
 
-	/* object class */
-	select_insn(s, tree, membase_reg_insn(INSN_MOV_MEMBASE_REG, call_target, offsetof(struct vm_object, class), call_target));
+		/* object class */
+		select_insn(s, tree, membase_reg_insn(INSN_MOV_MEMBASE_REG, call_target, offsetof(struct vm_object, class), call_target));
 
-	/* vtable */
-	select_insn(s, tree, membase_reg_insn(INSN_MOV_MEMBASE_REG, call_target, offsetof(struct vm_class, vtable), call_target));
+		/* vtable */
+		select_insn(s, tree, membase_reg_insn(INSN_MOV_MEMBASE_REG, call_target, offsetof(struct vm_class, vtable), call_target));
 
-	/* native ptr */
-	select_insn(s, tree, imm_reg_insn(INSN_ADD_IMM_REG, method_offset, call_target));
+		/* native ptr */
+		select_insn(s, tree, imm_reg_insn(INSN_ADD_IMM_REG, method_offset, call_target));
 
-	/* invoke method */
-	call_insn = reverse_reg_insn(INSN_CALL_REG, call_target);
+		/* invoke method */
+		call_insn = reverse_reg_insn(INSN_CALL_REG, call_target);
 
-	select_safepoint_insn(s, tree, call_insn);
+		select_safepoint_insn(s, tree, call_insn);
+	}
+
 	save_invoke_result(s, tree, method, stmt);
 
 	nr_stack_args = get_stack_args_count(method);

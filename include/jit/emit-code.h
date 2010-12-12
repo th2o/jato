@@ -10,6 +10,8 @@ struct vm_object;
 struct vm_jni_env;
 struct vm_method;
 
+extern void *emit_inline_cache_check(struct buffer *);
+extern void emit_inline_cache_fail(struct buffer *, unsigned long, void *);
 extern void emit_prolog(struct buffer *, unsigned long);
 extern void emit_trace_invoke(struct buffer *, struct compilation_unit *);
 extern void emit_epilog(struct buffer *);

@@ -15,6 +15,7 @@
 #include "vm/vm.h"
 
 #include "jit/compilation-unit.h"
+#include "jit/inline-cache.h"
 #include "jit/basic-block.h"
 #include "jit/compiler.h"
 #include "jit/emit-code.h"
@@ -166,8 +167,37 @@ static void process_call_fixup_sites(struct compilation_unit *cu)
 	}
 }
 
+/* LOCKING: jit_text_lock() to be held when called */
+static void *emit_inline_cache(struct compilation_unit *cu)
+{
+	void *inline_check;
+	struct buffer *buf;
+	unsigned long start;
+
+	buf = alloc_exec_buffer();
+	if (!buf)
+		return NULL;
+
+	start = buffer_offset(buf);
+
+	buf->buf = jit_text_ptr();
+
+#if 0
+	fprintf(stderr, "%s: %s.%s => %p\n", __func__, cu->method->class->name, cu->method->name, buf->buf);
+#endif
+
+	inline_check = emit_inline_cache_check(buf);
+
+	assert(buffer_offset(buf) == INLINE_CACHE_CHECK_SIZE);
+
+	jit_text_reserve_noalign(buffer_offset(buf));
+
+	return inline_check;
+}
+
 int emit_machine_code(struct compilation_unit *cu)
 {
+	void *inline_check = NULL;
 	unsigned long frame_size;
 	struct basic_block *bb;
 	struct buffer *buf;
@@ -178,6 +208,14 @@ int emit_machine_code(struct compilation_unit *cu)
 		return warn("out of memory"), -ENOMEM;
 
 	jit_text_lock();
+
+	assert(!vm_method_is_native(cu->method));
+
+	if (inline_cache_supports_method(cu->method)) {
+		inline_check = emit_inline_cache(cu);
+		if (!inline_check)
+			return warn("out of memory"), -ENOMEM;
+	}
 
 	buf->buf = jit_text_ptr();
 	cu->objcode = buf;
@@ -217,6 +255,9 @@ int emit_machine_code(struct compilation_unit *cu)
 
 	cu->exit_bb_ptr = bb_native_ptr(cu->exit_bb);
 	cu->unwind_bb_ptr = bb_native_ptr(cu->unwind_bb);
+
+	if (inline_check)
+		emit_inline_cache_fail(cu->objcode, (unsigned long) cu->method->virtual_index, inline_check);
 
 	jit_text_reserve(buffer_offset(cu->objcode));
 

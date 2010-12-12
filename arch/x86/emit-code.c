@@ -40,6 +40,7 @@
 #include "cafebabe/method_info.h"
 
 #include "jit/compilation-unit.h"
+#include "jit/inline-cache.h"
 #include "jit/basic-block.h"
 #include "jit/stack-slot.h"
 #include "jit/statement.h"
@@ -643,6 +644,60 @@ static void emit_test_imm_memdisp(struct insn *insn, struct buffer *buf, struct 
 	__emit_test_imm_memdisp(buf, insn->src.imm, insn->dest.disp);
 }
 
+/*
+ * This is the part of inline cache that checks whether we landed in the right
+ * method or not. The call-site stores expected class "struct vm_class" pointer
+ * to "%eax" so we need to make sure "object->class" matches that; otherwise we
+ * need to take the slow-path and do a full vtable lookup.
+ */
+void *emit_inline_cache_check(struct buffer *buf)
+{
+	void *jne_addr = NULL;
+
+	/* mov 0x4(%esp),%edx */
+	emit(buf, 0x8b);
+	emit(buf, 0x54);
+	emit(buf, 0x24);
+	emit(buf, 0x04);
+
+	/* cmp    (%edx),%eax */
+	emit(buf, 0x3b);
+	emit(buf, 0x02);
+
+	/* open-coded "jne" */
+	emit(buf, 0x0f);
+	emit(buf, 0x85);
+	jne_addr = buffer_current(buf);
+	emit_imm32(buf, 0);
+
+	return jne_addr;
+}
+
+void emit_inline_cache_fail(struct buffer *buf, unsigned long method_index, void *jne_addr)
+{
+	fixup_branch_target(jne_addr, buffer_current(buf));
+
+	__emit_mov_imm_reg(buf, (long) method_index, MACH_REG_xAX);
+
+	/* mov    (%edx),%edx */
+	emit(buf, 0x8b);
+	emit(buf, 0x12);
+
+	/* mov    0x78(%edx),%edx */
+	emit(buf, 0x8b);
+	emit(buf, 0x52);
+	emit(buf, 0x78);
+
+	/* mov    (%edx,%eax,4),%eax */
+	emit(buf, 0x8b);
+	emit(buf, 0x04);
+	emit(buf, 0x82);
+
+	/* jmp    *%eax */
+	emit(buf, 0xff);
+	emit(buf, 0xe0);
+}
+
 void emit_prolog(struct buffer *buf, unsigned long nr_locals)
 {
 	/* Unconditionally push callee-saved registers */
@@ -1048,10 +1103,17 @@ void emit_trampoline(struct compilation_unit *cu,
 
 	if (method_is_virtual(cu->method)) {
 		__emit_push_membase(buf, MACH_REG_EBP, 0x08);
-
 		__emit_push_imm(buf, (unsigned long)cu);
 		__emit_call(buf, fixup_vtable);
 		__emit_add_imm_reg(buf, 0x08, MACH_REG_ESP);
+
+		if (inline_cache_supports_method(cu->method)) {
+			__emit_push_imm(buf, (unsigned long) cu->method->class);
+			__emit_push_membase(buf, MACH_REG_EBP, 0x08);
+			__emit_push_membase(buf, MACH_REG_EBP, 0x04);
+			__emit_call(buf, inline_cache_fixup);
+			__emit_add_imm_reg(buf, 0x0c, MACH_REG_ESP);
+		}
 	}
 
 	__emit_pop_reg(buf, MACH_REG_EAX);

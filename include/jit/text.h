@@ -8,6 +8,7 @@ void jit_text_init(void);
 void jit_text_lock(void);
 void jit_text_unlock(void);
 void *jit_text_ptr(void);
+void jit_text_reserve_noalign(size_t size);
 void jit_text_reserve(size_t size);
 bool is_jit_text(void *);
 

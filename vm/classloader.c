@@ -19,6 +19,8 @@
 #include "lib/hash-map.h"
 #include "lib/string.h"
 
+#include "dalvik/dex-file.h"
+
 #include <assert.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -54,6 +56,7 @@ static inline void trace_pop(void)
 enum classpath_type {
 	CLASSPATH_DIR,
 	CLASSPATH_ZIP,
+	CLASSPATH_DEX,
 };
 
 struct classpath {
@@ -63,6 +66,7 @@ struct classpath {
 
 	const char *path;
 	struct zip *zip;
+	struct dex_file *dex;
 };
 
 /* These are the directories we search for classes */
@@ -142,6 +146,46 @@ error_free_cp:
 	return err;
 }
 
+static int add_dex_to_classpath(const char *dex)
+{
+	int err;
+
+	struct classpath *cp = malloc(sizeof *cp);
+	if (!cp)
+		return -ENOMEM;
+
+	cp->type = CLASSPATH_DEX;
+	cp->path = strdup(dex);
+	if (!cp->path) {
+		err = -ENOMEM;
+		goto error_free_cp;
+	}
+
+	cp->dex = dex_open(dex);
+	if (!cp->dex) {
+		err = -1;
+		goto error_free_path;
+	}
+
+	list_add_tail(&cp->node, &classpaths);
+	return 0;
+
+error_free_path:
+	free((void *) cp->path);
+error_free_cp:
+	free(cp);
+
+	return err;
+}
+
+static int add_file_to_classpath(const char *file)
+{
+	if (strstr(file, ".dex"))
+		return add_dex_to_classpath(file);
+
+	return add_zip_to_classpath(file);
+}
+
 int try_to_add_zip_to_classpath(const char *zip)
 {
 	struct stat st;
@@ -183,7 +227,7 @@ int classloader_add_to_classpath(const char *classpath)
 			if (S_ISDIR(st.st_mode))
 				add_dir_to_classpath(classpath_element);
 			else if (S_ISREG(st.st_mode))
-				add_zip_to_classpath(classpath_element);
+				add_file_to_classpath(classpath_element);
 			else {
 				warn("'%s' is not a regular file or a directory", classpath_element);
 			}
@@ -397,6 +441,11 @@ error_free_buf:
 	return NULL;
 }
 
+static struct vm_class *load_class_from_dex(struct dex_file *dex, const char *file)
+{
+	return NULL;
+}
+
 static struct vm_class *load_class_from_classpath_file(const struct classpath *cp,
 	const char *file)
 {
@@ -405,6 +454,8 @@ static struct vm_class *load_class_from_classpath_file(const struct classpath *c
 		return load_class_from_dir(cp->path, file);
 	case CLASSPATH_ZIP:
 		return load_class_from_zip(cp->zip, file);
+	case CLASSPATH_DEX:
+		return load_class_from_dex(cp->dex, file);
 	}
 
 	/* Should never reach this. */

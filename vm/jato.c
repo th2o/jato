@@ -580,6 +580,11 @@ static void handle_bootclasspath_append(const char *arg)
 	bootclasspath_append = arg;
 }
 
+static void handle_dalvik_classpath(const char *arg)
+{
+	handle_bootclasspath_append(arg);
+}
+
 enum operation {
 	OPERATION_MAIN_CLASS,
 	OPERATION_JAR_FILE,
@@ -829,6 +834,7 @@ const struct option options[] = {
 	DEFINE_OPTION_ARG("bootclasspath",	handle_bootclasspath),
 	DEFINE_OPTION_ADJACENT_ARG("Xbootclasspath/a:",	handle_bootclasspath_append),
 	DEFINE_OPTION_ARG("cp",			handle_classpath),
+	DEFINE_OPTION_ARG("dalvikcp",		handle_dalvik_classpath),
 	DEFINE_OPTION_ARG("jar",		handle_jar),
 	DEFINE_OPTION("verbose:gc",		handle_verbose_gc),
 

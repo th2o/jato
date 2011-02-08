@@ -76,6 +76,7 @@ OBJS += cafebabe/line_number_table_attribute.o
 OBJS += cafebabe/method_info.o
 OBJS += cafebabe/source_file_attribute.o
 OBJS += cafebabe/stream.o
+OBJS += dalvik/dex-file.o
 OBJS += jit/args.o
 OBJS += jit/arithmetic-bc.o
 OBJS += jit/basic-block.o

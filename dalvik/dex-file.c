@@ -107,4 +107,5 @@ void dex_close(struct dex_file *self)
 {
 	munmap(self->dx_mmap, self->dx_size);
 	close(self->dx_fd);
+	free(self);
 }

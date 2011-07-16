@@ -135,7 +135,6 @@ LIB_OBJS += vm/jni-interface.o
 LIB_OBJS += vm/jni.o
 LIB_OBJS += vm/method.o
 LIB_OBJS += vm/verifier.o
-LIB_OBJS += vm/verify-functions.o
 LIB_OBJS += vm/monitor.o
 LIB_OBJS += vm/natives.o
 LIB_OBJS += vm/object.o

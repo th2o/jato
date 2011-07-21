@@ -432,7 +432,7 @@ clean:
 	$(Q) - rm -f test-suite.o
 	$(Q) - rm -f $(ARCH_TESTRUNNER)
 	$(Q) - rm -f $(RUNTIME_CLASSES)
-	$(Q) - find test/functional/ -name "*.class" | xargs rm -f
+	$(Q) - find test/functional/ -name "*.class" -prune -path "test/functional/corrupt" | xargs rm -f
 	$(Q) - find runtime/ -name "*.class" | xargs rm -f
 	$(Q) - rm -f tags
 	$(Q) - rm -f include/arch
